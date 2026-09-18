@@ -40,6 +40,9 @@ loadstring(game:HttpGet("https://raw.githubusercontent.com/ffffddggt277-debug/Ch
 Окно скрывается/показывается клавишей **RightShift**. Для отладки: `_G.MM2HUB`
 (например `_G.MM2HUB.Core.murderer()`, выгрузка — `_G.MM2HUB.Unload()`).
 
+Модули грузятся с ветки `main`, а если их там нет — со запасной ветки из списка `BRANCHES`
+в `main.lua`. Так сборку можно тестировать сразу после пуша, не дожидаясь мержа PR.
+
 ## Что внутри
 
 | Вкладка | Функции |

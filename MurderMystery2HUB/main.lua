@@ -18,15 +18,24 @@
 -- ======================== НАСТРОЙКИ СБОРКИ ========================
 
 local REPO   = "ffffddggt277-debug/CheatHub"
-local BRANCH = "main"
 local FOLDER = "MurderMystery2HUB"
 local BUILD  = "1.0.0"
 
--- BASE - общий префикс всех RAW-ссылок (модули и картинки берём отсюда).
-local BASE = "https://raw.githubusercontent.com/" .. REPO .. "/" .. BRANCH .. "/" .. FOLDER .. "/"
+-- Ветки, откуда грузим модули: сначала основная, потом запасная (рабочая ветка,
+-- нужна, пока изменения не влиты в main). Первая рабочая и запоминается.
+local BRANCHES = { "main", "arena/01a0b53a-cheathub" }
+
+local function rawBase(branch)
+    return "https://raw.githubusercontent.com/" .. REPO .. "/" .. branch .. "/" .. FOLDER .. "/"
+end
 
 -- Зеркало картинок: если executor не пускает raw.githubusercontent.com.
-local CDN = "https://cdn.jsdelivr.net/gh/" .. REPO .. "@" .. BRANCH .. "/" .. FOLDER .. "/"
+local function cdnBase(branch)
+    return "https://cdn.jsdelivr.net/gh/" .. REPO .. "@" .. branch .. "/" .. FOLDER .. "/"
+end
+
+local BASE = rawBase(BRANCHES[1])   -- префикс, который в итоге сработал
+local activeBranch = BRANCHES[1]    -- ветка, с которой реально загрузились модули
 
 -- Список модулей: порядок важен - ui и core грузятся первыми.
 local FILES = {
@@ -52,24 +61,37 @@ local function notify(title, text, duration)
     warn("[MM2HUB] " .. title .. " | " .. text)
 end
 
--- Скачиваем файл из репозитория и выполняем его.
+-- Скачиваем модуль и выполняем его. Если с основной ветки не вышло -
+-- пробуем следующую ветку из списка (см. BRANCHES).
 local function loadModule(path)
-    local ok, result = pcall(function()
-        local code = game:HttpGet(BASE .. path)
+    local lastError = "неизвестная ошибка"
 
-        if type(code) ~= "string" or #code == 0 then
-            error("пустой ответ для " .. path .. " (404? проверь ветку и имя папки)", 0)
+    for _, branch in ipairs(BRANCHES) do
+        local ok, result = pcall(function()
+            local code = game:HttpGet(rawBase(branch) .. path)
+
+            if type(code) ~= "string" or #code == 0 then
+                error("пустой ответ (404?) - ветка " .. branch, 0)
+            end
+
+            local chunk, err = loadstring(code, "MM2HUB/" .. path)
+            if not chunk then
+                error("синтаксическая ошибка: " .. tostring(err), 0)
+            end
+
+            return chunk()
+        end)
+
+        if ok then
+            BASE = rawBase(branch)
+            activeBranch = branch
+            return true, result
         end
 
-        local chunk, err = loadstring(code, "MM2HUB/" .. path)
-        if not chunk then
-            error("синтаксическая ошибка в " .. path .. ": " .. tostring(err), 0)
-        end
+        lastError = branch .. ": " .. tostring(result)
+    end
 
-        return chunk()
-    end)
-
-    return ok, result
+    return false, path .. " -> " .. lastError
 end
 
 -- Повторный запуск поверх старого - сначала выгружаем прошлую сборку.
@@ -112,10 +134,11 @@ local Misc     = modules.Misc
 
 -- ============================ СБОРКА ============================
 
--- Логотип: сначала RAW, потом зеркало jsDelivr (ui.lua сам скачает картинку).
+-- Логотип: сначала RAW с рабочей ветки, потом зеркало jsDelivr, потом остальные ветки.
 local LOGO = {
-    BASE .. "assets/icon.png",
-    CDN .. "assets/icon.png",
+    rawBase(activeBranch) .. "assets/icon.png",
+    cdnBase(activeBranch) .. "assets/icon.png",
+    rawBase(BRANCHES[1]) .. "assets/icon.png",
 }
 
 UI.Version = BUILD
